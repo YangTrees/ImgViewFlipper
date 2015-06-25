@@ -6,6 +6,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -16,12 +17,15 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.Socket;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
@@ -29,8 +33,11 @@ import java.util.Date;
 public class MainActivity extends ActionBarActivity {
 
     /** Called when the activity is first created. */
+    private String myIP ;
+    private int myPort ;
     private ImageView imageView; // 图片
-    private Button button; // 按钮
+    private Button button01; // 按钮
+    private Button button02; // 按钮
     Bitmap myBitmap;
     private byte[] mContent;
     @Override
@@ -38,9 +45,18 @@ public class MainActivity extends ActionBarActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // 获取IP地址
+        Intent intent = getIntent();
+        Bundle data = intent.getExtras();
+        myIP = data.getString("ipname");
+        myPort = data.getInt("portname");
+
         imageView = (ImageView) findViewById(R.id.imageView1);
-        button = (Button) findViewById(R.id.button1);
-        button.setOnClickListener(new Button.OnClickListener() {
+        button01 = (Button) findViewById(R.id.button1);
+        button02 = (Button) findViewById(R.id.button2);
+
+
+        button01.setOnClickListener(new Button.OnClickListener() {
 
             @Override
             public void onClick(View v) {
@@ -55,7 +71,7 @@ public class MainActivity extends ActionBarActivity {
                 builder.setPositiveButton("相机",
                         new DialogInterface.OnClickListener() {
                             @Override
-                            public void onClick(DialogInterface  dialog, int which) {
+                            public void onClick(DialogInterface dialog, int which) {
                                 Intent intent = new Intent(
                                         "android.media.action.IMAGE_CAPTURE");
                                 startActivityForResult(intent, 0);
@@ -75,6 +91,30 @@ public class MainActivity extends ActionBarActivity {
                         });
                 AlertDialog alert = builder.create();
                 alert.show();
+
+            }
+        });
+
+        button02.setOnClickListener(new Button.OnClickListener() {
+
+            @Override
+            public void onClick(View v) {
+
+                /*
+                // ImageView对象(iv_photo)必须做如下设置后，才能获取其中的图像
+                imageView.setDrawingCacheEnabled(true);
+                // 获取ImageView中的图像
+                Bitmap sendBmp =Bitmap.createBitmap(imageView.getDrawingCache());
+                // 从ImaggeView对象(iv_photo)中获取图像后，要记得调用setDrawingCacheEnabled(false)
+                // 清空画图缓冲区
+                imageView.setDrawingCacheEnabled(false);
+                */
+                if(myBitmap!=null)
+                {
+                    Bitmap sendBmp = resizeBmp(myBitmap,192,108);
+                    Thread sendTH = new MySendThread(sendBmp,myIP,myPort);
+                    sendTH.start();
+                }
 
             }
         });
@@ -100,8 +140,7 @@ public class MainActivity extends ActionBarActivity {
                     // 获得图片的uri
                     Uri originalUri = data.getData();
                     // 将图片内容解析成字节数组
-                    mContent = readStream(resolver.openInputStream(Uri
-                            .parse(originalUri.toString())));
+                    mContent = readStream(resolver.openInputStream(Uri.parse(originalUri.toString())));
                     // 将字节数组转换为ImageView可调用的Bitmap对象
                     myBitmap = getPicFromBytes(mContent, null);
                     // //把得到的图片绑定在控件上显示
@@ -180,6 +219,17 @@ public class MainActivity extends ActionBarActivity {
 
     }
 
+    private Bitmap resizeBmp(Bitmap srcBmp ,int scaleWidth, int scaleHeight)
+    {
+        int srcWidth = srcBmp.getWidth();
+        int srcHeight = srcBmp.getHeight();
+        Matrix matrix = new Matrix();
+        matrix.postScale(scaleWidth, scaleHeight);
+
+        Bitmap resizedBmp = Bitmap.createBitmap(srcBmp,0,0,srcWidth,srcHeight,matrix,true);
+        return resizedBmp;
+    }
+
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
@@ -202,3 +252,51 @@ public class MainActivity extends ActionBarActivity {
         return super.onOptionsItemSelected(item);
     }
 }
+
+
+class MySendThread extends Thread{
+
+    private OutputStream os;
+    private String ipname;
+    private  int portnum;
+    private Bitmap sendBmp;
+    private byte byteBuffer[] = new byte[1024];
+    ByteArrayOutputStream outputByteStream;
+    public MySendThread(Bitmap sendBmp,String ipname,int portnum){
+
+        this.ipname = ipname;
+        this.portnum = portnum;
+        this.sendBmp = sendBmp;
+        try {
+            outputByteStream.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void run() {
+
+       try {
+                //将图像数据通过Socket发送
+                Socket tempSocket = new Socket(ipname, portnum);
+                os = tempSocket.getOutputStream();
+
+                sendBmp.compress(Bitmap.CompressFormat.PNG, 100, outputByteStream);
+                //byte[] byteArray = outputByteStream.toByteArray();
+                ByteArrayInputStream inputByteStream = new ByteArrayInputStream(outputByteStream.toByteArray());
+                int amount = inputByteStream.read(byteBuffer);
+                while (amount != -1) {
+                    os.write(byteBuffer, 0, amount);
+                }
+
+                outputByteStream.flush();
+                outputByteStream.close();
+
+                tempSocket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+       }
+    }
+
+}
+
