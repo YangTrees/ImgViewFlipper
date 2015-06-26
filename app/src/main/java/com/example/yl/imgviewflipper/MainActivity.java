@@ -17,7 +17,6 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -26,6 +25,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
@@ -112,6 +112,8 @@ public class MainActivity extends ActionBarActivity {
                 if(myBitmap!=null)
                 {
                     Bitmap sendBmp = resizeBmp(myBitmap,192,108);
+                    imageView.setImageBitmap(sendBmp);
+
                     Thread sendTH = new MySendThread(sendBmp,myIP,myPort);
                     sendTH.start();
                 }
@@ -134,7 +136,7 @@ public class MainActivity extends ActionBarActivity {
              * ， 所以为了区别到底选择了那个方式获取图片要进行判断
              * ，这里的requestCode跟startActivityForResult里面第二个参数对应 1== 相册 2 ==相机
              */
-            if (requestCode == 1) {
+            if (requestCode == 1) { //相册
 
                 try {
                     // 获得图片的uri
@@ -149,14 +151,14 @@ public class MainActivity extends ActionBarActivity {
                     System.out.println(e.getMessage());
                 }
 
-            } else if (requestCode == 0) {
+            } else if (requestCode == 0) {  //相机
 
                 String sdStatus = Environment.getExternalStorageState();
                 if (!sdStatus.equals(Environment.MEDIA_MOUNTED)) { // 检测sd是否可用
                     return;
                 }
                 Bundle bundle = data.getExtras();
-                Bitmap bitmap = (Bitmap) bundle.get("data");// 获取相机返回的数据，并转换为Bitmap图片格式
+                myBitmap = (Bitmap) bundle.get("data");// 获取相机返回的数据，并转换为Bitmap图片格式
                 FileOutputStream b = null;
                 File file = new File("/sdcard/myImage/");
                 file.mkdirs();// 创建文件夹，名称为myimage
@@ -170,7 +172,7 @@ public class MainActivity extends ActionBarActivity {
                 String fileName = "/sdcard/myImage/" + str + ".jpg";
                 try {
                     b = new FileOutputStream(fileName);
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, b);// 把数据写入文件
+                    myBitmap.compress(Bitmap.CompressFormat.JPEG, 100, b);// 把数据写入文件
                 } catch (FileNotFoundException e) {
                     e.printStackTrace();
                 } finally {
@@ -219,14 +221,17 @@ public class MainActivity extends ActionBarActivity {
 
     }
 
-    private Bitmap resizeBmp(Bitmap srcBmp ,int scaleWidth, int scaleHeight)
+    private Bitmap resizeBmp(Bitmap srcBmp ,int newWidth, int newHeight)
     {
         int srcWidth = srcBmp.getWidth();
         int srcHeight = srcBmp.getHeight();
+        float scaleWidth = ((float)newWidth)/srcWidth;
+        float scaleHeight = ((float)newHeight)/srcHeight;
         Matrix matrix = new Matrix();
         matrix.postScale(scaleWidth, scaleHeight);
 
         Bitmap resizedBmp = Bitmap.createBitmap(srcBmp,0,0,srcWidth,srcHeight,matrix,true);
+
         return resizedBmp;
     }
 
@@ -261,39 +266,53 @@ class MySendThread extends Thread{
     private  int portnum;
     private Bitmap sendBmp;
     private byte byteBuffer[] = new byte[1024];
-    ByteArrayOutputStream outputByteStream;
+
     public MySendThread(Bitmap sendBmp,String ipname,int portnum){
 
         this.ipname = ipname;
         this.portnum = portnum;
         this.sendBmp = sendBmp;
-        try {
-            outputByteStream.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+
     }
 
     public void run() {
 
        try {
-                //将图像数据通过Socket发送
-                Socket tempSocket = new Socket(ipname, portnum);
-                os = tempSocket.getOutputStream();
 
-                sendBmp.compress(Bitmap.CompressFormat.PNG, 100, outputByteStream);
-                //byte[] byteArray = outputByteStream.toByteArray();
-                ByteArrayInputStream inputByteStream = new ByteArrayInputStream(outputByteStream.toByteArray());
-                int amount = inputByteStream.read(byteBuffer);
-                while (amount != -1) {
-                    os.write(byteBuffer, 0, amount);
-                }
+           int bytes = sendBmp.getByteCount();
+           ByteBuffer buffer = ByteBuffer.allocate(bytes); //Create a new buffer
+           sendBmp.copyPixelsToBuffer(buffer); //Move the byte data to the buffer
+           byte[] array = buffer.array();
 
-                outputByteStream.flush();
-                outputByteStream.close();
+           //将图像数据通过Socket发送
+           Socket tempSocket = new Socket(ipname, portnum);
+           os = tempSocket.getOutputStream();
 
-                tempSocket.close();
-            } catch (IOException e) {
+           int i=0;
+           while(i<bytes)
+           {
+               os.write(array,i,192*4);
+               i+=192*4;
+           }
+
+//           ByteArrayOutputStream outByteStream = new ByteArrayOutputStream();
+//           sendBmp.compress(Bitmap.CompressFormat.PNG, 100, outByteStream);
+//           ByteArrayInputStream inputByteStream = new ByteArrayInputStream(outByteStream.toByteArray());
+//
+//
+//
+//
+//           int amount;
+//           while ((amount=inputByteStream.read(byteBuffer)) != -1) {
+//                os.write(byteBuffer, 0, amount);
+//           }
+//
+//           outByteStream.flush();
+//           outByteStream.close();
+
+           tempSocket.close();
+
+       } catch (IOException e) {
                 e.printStackTrace();
        }
     }
