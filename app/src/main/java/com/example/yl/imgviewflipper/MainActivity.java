@@ -111,7 +111,7 @@ public class MainActivity extends ActionBarActivity {
                 */
                 if(myBitmap!=null)
                 {
-                    Bitmap sendBmp = resizeBmp(myBitmap,192,108);
+                    Bitmap sendBmp = resizeBmp(myBitmap,640,480);
                     imageView.setImageBitmap(sendBmp);
 
                     Thread sendTH = new MySendThread(sendBmp,myIP,myPort);
@@ -265,7 +265,6 @@ class MySendThread extends Thread{
     private String ipname;
     private  int portnum;
     private Bitmap sendBmp;
-    private byte byteBuffer[] = new byte[1024];
 
     public MySendThread(Bitmap sendBmp,String ipname,int portnum){
 
@@ -291,17 +290,13 @@ class MySendThread extends Thread{
            int i=0;
            while(i<bytes)
            {
-               os.write(array,i,192*4);
-               i+=192*4;
+               os.write(array,i,sendBmp.getWidth()*4);
+               i+=sendBmp.getWidth()*4;
            }
 
 //           ByteArrayOutputStream outByteStream = new ByteArrayOutputStream();
 //           sendBmp.compress(Bitmap.CompressFormat.PNG, 100, outByteStream);
 //           ByteArrayInputStream inputByteStream = new ByteArrayInputStream(outByteStream.toByteArray());
-//
-//
-//
-//
 //           int amount;
 //           while ((amount=inputByteStream.read(byteBuffer)) != -1) {
 //                os.write(byteBuffer, 0, amount);
